@@ -4,18 +4,30 @@ using System.IO;
 using System.IO.Ports;
 using System.Linq;
 using System.Text;
+using System.Windows.Forms;
 
 namespace mageload
 {
     public enum Commands : byte
     {
-        OK = 0xF0,
-        FAIL = 0xFF,
-        EXECUTE = 0x0A,
-        ADDRESS = 0x01,
-        READ = 0x02,
-        WRITE = 0x03,
-        EXIT = 0x04
+        OK        = 0xF0,
+        FAIL      = 0xFF,
+        EXECUTE   = 0x0A,
+        SIGNATURE = 0x01,
+        ADDRESS   = 0x02,
+        READ      = 0x03,
+        WRITE     = 0x04,
+        EXIT      = 0x05
+    }
+
+    public enum Signature : byte
+    {
+        atmega2560_0 = 0x1E,
+        atmega2560_1 = 0x98,
+        atmega2560_2 = 0x01,
+        atmega328p_0 = 0x1E,
+        atmega328p_1 = 0x95,
+        atmega328p_2 = 0x0F,
     }
 
     public enum RecordType : byte
@@ -45,6 +57,7 @@ namespace mageload
         static string _port = "";
         static string _file = "";
         static string _hex = "";
+        static ushort _pageSize = 0;
         static List<FlashPage> _pages = new List<FlashPage>();
         static SerialPort _serial;
         const string Usage = "\n ███╗   ███╗ █████╗  ██████╗ ███████╗██╗      ██████╗  █████╗ ██████╗\n"
@@ -57,7 +70,8 @@ namespace mageload
                              + "Usage: mageload [options] [-p port] [-f file]\n\n"
                              + "OPTIONS:\n"
                              + "       -v Verbose mode\n\n"
-                             + "-p port:  Specify port (stored for reuse)\n\n"
+                             + "-p port:  Specify port (stored for reuse)\n"
+                             + "          If no port specified, a window will appear\n\n"
                              + "-f file:  The hex file to load\n\n";
 
         static void Main(string[] args)
@@ -94,15 +108,31 @@ namespace mageload
             }
             if (args[argIndex].ToLower() == "-p")
             {
-                _port = args[++argIndex];
                 argIndex++;
-                Properties.Settings.Default.Port = _port;
-                Properties.Settings.Default.Save();
+                if (argIndex == args.Length)
+                {
+                    PortWindow window = new PortWindow();
+                    DialogResult r = window.ShowDialog();
+                    if (r != DialogResult.OK) return false;
+                    _port = window.getPort();
+                    Properties.Settings.Default.Port = _port;
+                    Properties.Settings.Default.Save();
+                }
+                else
+                {
+                    _port = args[argIndex];
+                    argIndex++;
+                    Properties.Settings.Default.Port = _port;
+                    Properties.Settings.Default.Save();
+                }
             }
-            if (args[argIndex].ToLower() == "-f")
+            if (argIndex < args.Length)
             {
-                _file = args[++argIndex];
-                argIndex++;
+                if (args[argIndex].ToLower() == "-f")
+                {
+                    _file = args[++argIndex];
+                    argIndex++;
+                }
             }
             if (_file == "" && _port == "")
             {
@@ -110,7 +140,8 @@ namespace mageload
                 return false;
             }
 
-            if (_port == "") _port = Properties.Settings.Default.Port;
+            if (_file == "") return false;
+            if (_port == "") _port = Properties.Settings.Default.Port; _port = Properties.Settings.Default.Port;
 
             return true;
         }
@@ -144,56 +175,64 @@ namespace mageload
             short bytecount = 0;
             bool eofFound = false;
             string[] records = _hex.Split(':');
-            foreach (string r in records)
+            try
             {
-                if (r.Length == 0) continue;
-                byte length = Convert.ToByte(r.Substring(0, 2), 16);
-                ushort address = Convert.ToUInt16(r.Substring(2, 4), 16);
-                RecordType type = (RecordType)Convert.ToByte(r.Substring(6, 2), 16);
-                string data = r.Substring(8, length * 2);
-
-                switch (type)
+                foreach (string r in records)
                 {
-                    case RecordType.Data:
-                        char[] digits = data.ToCharArray();
-                        for (int i = 0; i < digits.Length; i += 2)
-                        {
-                            if (bytecount == 0) page.Address += address;
-                            string value = String.Concat(digits[i], digits[i + 1]);
-                            page.Data[bytecount++] = Convert.ToByte(value, 16);
-                            if (bytecount == 256)
+                    if (r.Length == 0) continue;
+                    byte length = Convert.ToByte(r.Substring(0, 2), 16);
+                    ushort address = Convert.ToUInt16(r.Substring(2, 4), 16);
+                    RecordType type = (RecordType)Convert.ToByte(r.Substring(6, 2), 16);
+                    string data = r.Substring(8, length * 2);
+
+                    switch (type)
+                    {
+                        case RecordType.Data:
+                            char[] digits = data.ToCharArray();
+                            for (int i = 0; i < digits.Length; i += 2)
+                            {
+                                if (bytecount == 0) page.Address += address;
+                                string value = String.Concat(digits[i], digits[i + 1]);
+                                page.Data[bytecount++] = Convert.ToByte(value, 16);
+                                if (bytecount == _pageSize)
+                                {
+                                    bytecount = 0;
+                                    _pages.Add(page);
+                                    page = new FlashPage(baseAddress);
+                                }
+                            }
+                            break;
+                        case RecordType.EOF:
+                            eofFound = true;
+                            break;
+                        case RecordType.ExtSegAddress:
+                            if (bytecount != 0)
                             {
                                 bytecount = 0;
                                 _pages.Add(page);
-                                page = new FlashPage(baseAddress);
+                                page = new FlashPage();
                             }
-                        }
-                        break;
-                    case RecordType.EOF:
-                        eofFound = true;
-                        break;
-                    case RecordType.ExtSegAddress:
-                        if (bytecount != 0)
-                        {
-                            bytecount = 0;
-                            _pages.Add(page);
-                            page = new FlashPage();
-                        }
-                        baseAddress = Convert.ToUInt16(data, 16);
-                        baseAddress *= 16;
-                        page.Address = baseAddress;
-                        break;
-                    case RecordType.StartSegAddress:
-                        //Nothing to do here
-                        break;
-                    case RecordType.ExtLinAddress:
-                    case RecordType.StartLinAddress:
-                        Console.Write("\nUnknown record type in file\n\n");
-                        break;
+                            baseAddress = Convert.ToUInt16(data, 16);
+                            baseAddress *= 16;
+                            page.Address = baseAddress;
+                            break;
+                        case RecordType.StartSegAddress:
+                            //Nothing to do here
+                            break;
+                        case RecordType.ExtLinAddress:
+                        case RecordType.StartLinAddress:
+                            Console.Write("\nUnknown record type in file\n\n");
+                            break;
+                    }
                 }
-            }
 
-            if (bytecount > 0) _pages.Add(page);
+                if (bytecount > 0) _pages.Add(page);
+            }
+            catch(Exception)
+            {
+                Console.Write("\nUnrecognized file\n\n");
+                return false;
+            }
 
             return eofFound;
         }
@@ -221,6 +260,26 @@ namespace mageload
             catch (Exception)
             {
                 Console.Write("\nCould not open COM port\n\n");
+                return false;
+            }
+
+            byte[] bfr = new byte[4] {(byte)Commands.SIGNATURE, (byte)Commands.EXECUTE, 0, 0};
+            _serial.Write(bfr, 0, 2);
+            _serial.Read(bfr, 0, 4);
+
+            if (bfr[0] == (byte)Signature.atmega2560_0 && bfr[1] == (byte)Signature.atmega2560_1 && bfr[2] == (byte)Signature.atmega2560_2 && bfr[3] == (byte)Commands.OK)
+            {
+                _pageSize = 256;
+                if (_verbose) Console.WriteLine("ATmega2560 found");
+            }
+            if (bfr[0] == (byte)Signature.atmega328p_0 && bfr[1] == (byte)Signature.atmega328p_1 && bfr[2] == (byte)Signature.atmega328p_2 && bfr[3] == (byte)Commands.OK)
+            {
+                _pageSize = 128;
+                if (_verbose) Console.WriteLine("ATmega328P found");
+            }
+            else
+            {
+                Console.Write("\nInvalid device detected\n\n");
                 return false;
             }
 
@@ -255,7 +314,7 @@ namespace mageload
                         return false;
                     }
 
-                    ushort size = 256;
+                    ushort size = _pageSize;
                     bfr = new byte[4];
                     bfr[0] = (byte)Commands.WRITE;
                     bfr[1] = (byte)(size >> 8);
@@ -264,7 +323,7 @@ namespace mageload
                     if (_verbose) Console.Write("WRITE   " + ToHex(bfr) + " ");
                     _serial.Write(bfr, 0, 4);
                     if (_verbose) Console.Write("...DATA... ");
-                    _serial.Write(p.Data, 0, 256);
+                    _serial.Write(p.Data, 0, _pageSize);
                     while (_serial.BytesToWrite != 0) ;
 
                     response = (byte)_serial.ReadByte();
@@ -313,7 +372,7 @@ namespace mageload
                         return false;
                     }
 
-                    ushort size = 256;
+                    ushort size = _pageSize;
                     bfr = new byte[4];
                     bfr[0] = (byte)Commands.READ;
                     bfr[1] = (byte)(size >> 8);
@@ -322,9 +381,9 @@ namespace mageload
                     if (_verbose) Console.Write("READ    " + ToHex(bfr) + " ");
                     _serial.Write(bfr, 0, 4);
 
-                    byte[] data = new byte[256];
+                    byte[] data = new byte[_pageSize];
                     if (_verbose) Console.Write("...DATA... ");
-                    for (int i = 0; i < 256; i++)
+                    for (int i = 0; i < _pageSize; i++)
                     {
                         data[i] = (byte)_serial.ReadByte();
                     }
@@ -338,7 +397,7 @@ namespace mageload
                         return false;
                     }
 
-                    for (int i = 0; i < 256; i++)
+                    for (int i = 0; i < _pageSize; i++)
                     {
                         if (p.Data[i] != data[i])
                         {
