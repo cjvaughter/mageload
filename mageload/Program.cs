@@ -83,7 +83,7 @@ namespace mageload
                 SerialClose();
                 return;
             }
-            Console.Write("\nUpload successful\n\n");
+            Console.Write("\nUpload successful\n");
         }
 
         static bool ParseArgs(string[] args)
@@ -296,19 +296,19 @@ namespace mageload
         {
             try
             {
-                if(!_verbose) Console.Write("\nWriting   [");
+                if (!_verbose) Console.Write("Writing   ");
                 _serial.ReadExisting();
+                uint lastpercent = 0;
                 for (uint i = 0; i < _maxAddress; i += _pageSize)
                 {
                     if (!_verbose)
                     {
-                        if (i > 0) for (uint s = 0; s < 51; s++) Console.Write('\b');
                         uint percent = (uint) (((float) i/(float) _maxAddress)*50);
-                        for (uint s = 0; s < 50; s++)
+                        if (percent >= lastpercent)
                         {
-                            Console.Write(s <= percent ? "+" : " ");
+                            for (; lastpercent <= percent; lastpercent++)
+                                Console.Write("+");
                         }
-                        Console.Write("]");
                     }
                     byte[] bfr = new byte[6];
                     bfr[0] = (byte)Commands.Address;
@@ -367,19 +367,19 @@ namespace mageload
         {
             try
             {
-                if (!_verbose) Console.Write("Verifying [");
+                if (!_verbose) Console.Write("Verifying ");
                 byte[] bfr;
+                uint lastpercent = 0;
                 for (uint i = 0; i < _maxAddress; i += _pageSize)
                 {
                     if (!_verbose)
                     {
-                        if (i > 0) for (uint s = 0; s < 51; s++) Console.Write('\b');
                         uint percent = (uint)(((float)i / (float)_maxAddress) * 50);
-                        for (uint s = 0; s < 50; s++)
+                        if (percent >= lastpercent)
                         {
-                            Console.Write(s <= percent ? "+" : " ");
+                            for (; lastpercent <= percent; lastpercent++)
+                                Console.Write("+");
                         }
-                        Console.Write("]");
                     }
                     bfr = new byte[6];
                     bfr[0] = (byte)Commands.Address;
@@ -437,7 +437,7 @@ namespace mageload
                     }
                 }
 
-                if (!_verbose) Console.Write("\n\n");
+                if (!_verbose) Console.Write("\n");
                 bfr = new byte[2];
                 bfr[0] = (byte)Commands.Exit;
                 bfr[1] = (byte)(Commands.Execute);
