@@ -44,7 +44,7 @@ namespace mageload
     class Program
     {
         static bool _verbose;
-        //static bool _ota; //Next Version
+        static bool _ota;
         static string _port = "";
         static string _file = "";
         static string _hex = "";
@@ -78,11 +78,15 @@ namespace mageload
                 SerialClose();
                 return;
             }
-            if (!VerifyData())
+            if (!_ota)
             {
-                SerialClose();
-                return;
+                if (!VerifyData())
+                {
+                    SerialClose();
+                    return;
+                }
             }
+            SerialClose();
             Console.Write("\nUpload successful\n");
         }
 
@@ -101,7 +105,7 @@ namespace mageload
             }
             if (args[argIndex].ToLower() == "-o")
             {
-                //_ota = true; //Next Version
+                _ota = true;
                 argIndex++;
             }
             if (args[argIndex].ToLower() == "-p")
@@ -188,7 +192,7 @@ namespace mageload
                             char[] digits = data.ToCharArray();
                             for (int i = 0; i < digits.Length; i += 2)
                             {
-                                _data[address+i/2] = Convert.ToByte(String.Concat(digits[i], digits[i + 1]), 16);
+                                _data[address+i/2] = Convert.ToByte(string.Concat(digits[i], digits[i + 1]), 16);
                             }
                             uint temp = address + length;
                             if (temp > _maxAddress) _maxAddress = temp;
@@ -229,23 +233,38 @@ namespace mageload
                 return false;
             }
 
-            _serial = new SerialPort(_port, 115200, Parity.None, 8, StopBits.One);
-            _serial.ReadTimeout = 500;
-            _serial.WriteTimeout = 500;
+            int baud = 115200;
+            if (_ota) baud = 38400;
+
+            _serial = new SerialPort(_port, baud, Parity.None, 8, StopBits.One)
+            {
+                ReadTimeout = 500,
+                WriteTimeout = 500
+            };
 
             try
             {
                 _serial.Open();
-                _serial.DtrEnable = true;
-                Thread.Sleep(50);
-                _serial.DtrEnable = false;
-                Thread.Sleep(50);
+                if (!_ota)
+                {
+                    _serial.DtrEnable = true;
+                    Thread.Sleep(50);
+                    _serial.DtrEnable = false;
+                    Thread.Sleep(50);
+                }
             }
             catch (Exception e)
             {
                 Console.Write("\nCould not open COM port\n\n");
                 if(_verbose) Console.WriteLine(e.Message);
                 return false;
+            }
+
+            if (_ota)
+            {
+                _pageSize = 256;
+                _data = Enumerable.Repeat<byte>(0xFF, 261120).ToArray();
+                return true;
             }
 
             try
@@ -296,6 +315,12 @@ namespace mageload
         {
             try
             {
+                if (_ota)
+                {
+                    if (!OTA())
+                        return false;
+                }
+
                 if (!_verbose) Console.Write("Writing   ");
                 _serial.ReadExisting();
                 uint lastpercent = 0;
@@ -321,36 +346,64 @@ namespace mageload
                     if (_verbose) Console.Write("ADDRESS " + ToHex(bfr) + " ");
                     _serial.Write(bfr, 0, 6);
 
+                    if (_ota) Thread.Sleep(60);
 
-                    byte response = (byte)_serial.ReadByte();
-                    if (_verbose) Console.WriteLine(ToHex(response));
-                    if (response != (byte)Commands.OK)
+                    byte response;
+                    if (!_ota)
                     {
-                        Console.Write("\nFailed to address memory\n\n");
-                        if (_verbose) Console.WriteLine("Invalid response: 0x" + response.ToString("X"));
-                        return false;
+                        response = (byte) _serial.ReadByte();
+                        if (_verbose) Console.WriteLine(ToHex(response));
+                        if (response != (byte) Commands.OK)
+                        {
+                            Console.Write("\nFailed to address memory\n\n");
+                            if (_verbose) Console.WriteLine("Invalid response: 0x" + response.ToString("X"));
+                            return false;
+                        }
                     }
 
-                    ushort size = _pageSize;
                     bfr = new byte[4];
                     bfr[0] = (byte)Commands.Write;
-                    bfr[1] = (byte)(size >> 8);
-                    bfr[2] = (byte)(size);
+                    bfr[1] = (byte)(_pageSize >> 8);
+                    bfr[2] = (byte)(_pageSize);
                     bfr[3] = (byte)(Commands.Execute);
                     if (_verbose) Console.Write("WRITE   " + ToHex(bfr) + " ");
                     _serial.Write(bfr, 0, 4);
+                    if (_ota) Thread.Sleep(60);
                     if (_verbose) Console.Write("...DATA... ");
-                    _serial.Write(_data, (int)i, _pageSize);
-                    while (_serial.BytesToWrite != 0) {}
-
-                    response = (byte)_serial.ReadByte();
-                    if (_verbose) Console.WriteLine(ToHex(response));
-                    if (response != (byte)Commands.OK)
+                    if (_ota)
                     {
-                        Console.Write("\nFailed to write memory\n\n");
-                        if (_verbose) Console.WriteLine("Invalid response: 0x" + response.ToString("X"));
-                        return false;
+                        int size = _pageSize/4;
+                        _serial.Write(_data, (int)i, size);
+                        while (_serial.BytesToWrite != 0) { }
+                        Thread.Sleep(60);
+                        _serial.Write(_data, (int)i + size, size);
+                        while (_serial.BytesToWrite != 0) { }
+                        Thread.Sleep(60);
+                        _serial.Write(_data, (int)i + size*2, size);
+                        while (_serial.BytesToWrite != 0) { }
+                        Thread.Sleep(60);
+                        _serial.Write(_data, (int)i + size*3, size);
+                        while (_serial.BytesToWrite != 0) { }
+                        Thread.Sleep(60);
                     }
+                    else
+                    {
+                        _serial.Write(_data, (int)i, _pageSize);
+                        while (_serial.BytesToWrite != 0) { }
+                    }
+
+                    if (!_ota)
+                    {
+                        response = (byte) _serial.ReadByte();
+                        if (_verbose) Console.WriteLine(ToHex(response));
+                        if (response != (byte) Commands.OK)
+                        {
+                            Console.Write("\nFailed to write memory\n\n");
+                            if (_verbose) Console.WriteLine("Invalid response: 0x" + response.ToString("X"));
+                            return false;
+                        }
+                    }
+                    if(_verbose && _ota) Console.WriteLine("");
                 }
                 if (!_verbose) Console.Write("\n\n");
             }
@@ -401,11 +454,10 @@ namespace mageload
                         return false;
                     }
 
-                    ushort size = _pageSize;
                     bfr = new byte[4];
                     bfr[0] = (byte)Commands.Read;
-                    bfr[1] = (byte)(size >> 8);
-                    bfr[2] = (byte)(size);
+                    bfr[1] = (byte)(_pageSize >> 8);
+                    bfr[2] = (byte)(_pageSize);
                     bfr[3] = (byte)(Commands.Execute);
                     if (_verbose) Console.Write("READ    " + ToHex(bfr) + " ");
                     _serial.Write(bfr, 0, 4);
@@ -459,6 +511,22 @@ namespace mageload
         {
             try
             {
+                if (_ota)
+                {
+                    if (!ATMode()) return;
+
+                    if (_verbose) Console.WriteLine("Setting API 2 mode");
+                    _serial.Write("ATAP 2\r".ToCharArray(), 0, 7);
+                    _serial.ReadChar();
+                    _serial.ReadChar();
+                    if (_serial.ReadByte() != 0x0D)
+                    {
+                        Console.Write("\nCould not set API 2 mode\n\n");
+                        return;
+                    }
+
+                    if (!ExitATMode()) return;
+                }
                 _serial.Close();
             }
             catch (Exception e)
@@ -466,6 +534,31 @@ namespace mageload
                 Console.Write("\nCould not close " + _port + "\n\n");
                 if(_verbose) Console.WriteLine(e.Message);
             }
+        }
+
+        private static bool OTA()
+        {
+            byte[] dfuCommand = { 0x7E, 0x00, 0x0F, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFE, 0x00, 0x00, 0xFF, 0xF5};
+
+            if(_verbose) Console.WriteLine("Broadcasting DFU command...");
+            _serial.Write(dfuCommand, 0, 19);
+            Thread.Sleep(100);
+
+            if (!ATMode()) return false;
+
+            if (_verbose) Console.WriteLine("Setting transparent mode");
+            _serial.Write("ATAP 0\r".ToCharArray(), 0, 7);
+            _serial.ReadChar();
+            _serial.ReadChar();
+            if (_serial.ReadByte() != 0x0D)
+            {
+                Console.Write("\nCould not set transparent mode\n\n");
+                return false;
+            }
+
+            if(!ExitATMode()) return false;
+
+            return true;
         }
 
         static string ToHex(byte[] ba)
@@ -481,6 +574,38 @@ namespace mageload
             StringBuilder hex = new StringBuilder(2);
             hex.AppendFormat("{0:x2}", ba);
             return hex.ToString();
+        }
+
+        static bool ATMode()
+        {
+            while (_serial.BytesToWrite != 0) {}
+            while (_serial.BytesToRead != 0) { _serial.ReadByte(); }
+            if (_verbose) Console.WriteLine("Entering AT mode");
+            Thread.Sleep(200);
+            _serial.Write("+++".ToCharArray(), 0, 3);
+            Thread.Sleep(10);
+            _serial.ReadChar();
+            _serial.ReadChar();
+            if (_serial.ReadByte() != 0x0D)
+            {
+                Console.Write("\nCould not enter AT mode\n\n");
+                return false;
+            }
+            return true;
+        }
+
+        static bool ExitATMode()
+        {
+            if (_verbose) Console.WriteLine("Exiting AT mode");
+            _serial.Write("ATCN\r".ToCharArray(), 0, 5);
+            _serial.ReadChar();
+            _serial.ReadChar();
+            if (_serial.ReadByte() != 0x0D)
+            {
+                Console.Write("\nCould not exit AT mode\n\n");
+                return false;
+            }
+            return true;
         }
     }
 }
