@@ -69,6 +69,8 @@ namespace mageload
 
         static void Main(string[] args)
         {
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
             if (!ParseArgs(args)) return;
             if (!LoadFile()) return;
             if (!InitializeSerial()) return;
