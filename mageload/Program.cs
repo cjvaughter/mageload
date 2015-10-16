@@ -305,7 +305,7 @@ namespace mageload
             }
             catch (Exception e)
             {
-                Console.Write("\nCould read device signature\n\n");
+                Console.Write("\nCould not read device signature\n\n");
                 if (_verbose) Console.WriteLine(e.Message);
                 return false;
             }
