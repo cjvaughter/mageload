@@ -1,4 +1,18 @@
-﻿using System;
+﻿// Copyright 2015 Oklahoma State University
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+using System;
 using System.IO;
 using System.IO.Ports;
 using System.Linq;
@@ -6,6 +20,7 @@ using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 using mageload.Properties;
+using Microsoft.VisualStudio.Shell.Interop;
 
 namespace mageload
 {
@@ -41,8 +56,10 @@ namespace mageload
         StartLinAddress
     }
 
-    class Program
+    public class Program
     {
+        public static IVsOutputWindowPane Pane = null;
+
         static bool _verbose;
         static bool _ota;
         static string _port = "";
@@ -67,11 +84,24 @@ namespace mageload
                              + "          If no port specified, a window will appear\n\n"
                              + "-f file:  The hex file to load\n\n";
 
-        static void Main(string[] args)
+        public static void Main(string[] args)
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
+            _verbose = false;
+            _ota = false;
+            _port = "";
+            _file = "";
+            _hex = "";
+            _pageSize = 0;
+            _data = null;
+            _maxAddress = 0;
+            _serial = null;
+
             if (!ParseArgs(args)) return;
+            if (Pane != null)
+            {
+                Pane.Clear();
+                Pane.Activate();
+            }
             if (!LoadFile()) return;
             if (!InitializeSerial()) return;
             if (!ParseFile()) return;
@@ -89,7 +119,7 @@ namespace mageload
                 }
             }
             SerialClose();
-            Console.Write("\nUpload successful\n");
+            Write("\nUpload successful\n");
         }
 
         static bool ParseArgs(string[] args)
@@ -97,7 +127,7 @@ namespace mageload
             int argIndex = 0;
             if (args.Length == 0)
             {
-                Console.Write(Usage);
+                Write(Usage);
                 return false;
             }
             if (args[argIndex].ToLower() == "-v")
@@ -115,10 +145,11 @@ namespace mageload
                 argIndex++;
                 if (argIndex == args.Length)
                 {
+                    Application.EnableVisualStyles();
                     PortWindow window = new PortWindow();
                     DialogResult r = window.ShowDialog();
                     if (r != DialogResult.OK) return false;
-                    _port = window.getPort();
+                    _port = window.GetPort();
                     Settings.Default.Port = _port;
                     Settings.Default.Save();
                 }
@@ -140,12 +171,12 @@ namespace mageload
             }
             if (_file == "" && _port == "")
             {
-                Console.Write(Usage);
+                Write(Usage);
                 return false;
             }
 
             if (_file == "") return false;
-            if (_port == "") _port = Settings.Default.Port; _port = Settings.Default.Port;
+            _port = Settings.Default.Port;
 
             return true;
         }
@@ -154,7 +185,7 @@ namespace mageload
         {
             if (!File.Exists(_file))
             {
-                Console.Write("\nFile does not exist: " + _file + "\n\n");
+                Write("\nFile does not exist: " + _file + "\n\n");
                 return false;
             }
             try
@@ -166,8 +197,8 @@ namespace mageload
             }
             catch (Exception e)
             {
-                Console.Write("\nThe file could not be read\n\n");
-                if (_verbose) Console.WriteLine(e.Message);
+                Write("\nThe file could not be read\n\n");
+                if (_verbose) WriteLine(e.Message);
                 return false;
             }
             return true;
@@ -211,16 +242,16 @@ namespace mageload
                             break;
                         case RecordType.ExtLinAddress:
                         case RecordType.StartLinAddress:
-                            Console.Write("\nUnknown record type in file\n\n");
-                            if (_verbose) Console.WriteLine("Type: " + type);
+                            Write("\nUnknown record type in file\n\n");
+                            if (_verbose) WriteLine("Type: " + type);
                             break;
                     }
                 }
             }
             catch(Exception e)
             {
-                Console.Write("\nUnrecognized file\n\n");
-                if (_verbose) Console.WriteLine(e.Message);
+                Write("\nUnrecognized file\n\n");
+                if (_verbose) WriteLine(e.Message);
                 return false;
             }
 
@@ -231,7 +262,7 @@ namespace mageload
         {
             if (!SerialPort.GetPortNames().Contains(_port))
             {
-                Console.Write("\nInvalid COM port: " + _port + "\n\n");
+                Write("\nInvalid COM port: " + _port + "\n\n");
                 return false;
             }
 
@@ -257,8 +288,8 @@ namespace mageload
             }
             catch (Exception e)
             {
-                Console.Write("\nCould not open COM port\n\n");
-                if(_verbose) Console.WriteLine(e.Message);
+                Write("\nCould not open COM port\n\n");
+                if(_verbose) WriteLine(e.Message);
                 return false;
             }
 
@@ -285,28 +316,28 @@ namespace mageload
                     inbfr[2] == (byte) Signature.PIU_2 && inbfr[3] == (byte) Commands.OK)
                 {
                     _pageSize = 256;
-                    if (_verbose) Console.WriteLine("Player Interface Unit found\n");
+                    if (_verbose) WriteLine("Player Interface Unit found\n");
                     _data = Enumerable.Repeat<byte>(0xFF, 261120).ToArray(); //leave space for bootloader
                 }
                 else if (inbfr[0] == (byte) Signature.Cert_0 && inbfr[1] == (byte) Signature.Cert_1 &&
                          inbfr[2] == (byte) Signature.Cert_2 && inbfr[3] == (byte) Commands.OK)
                 {
                     _pageSize = 128;
-                    if (_verbose) Console.WriteLine("MCU Certification Board found\n");
+                    if (_verbose) WriteLine("MCU Certification Board found\n");
                     _data = Enumerable.Repeat<byte>(0xFF, 32000).ToArray();
                 }
                 else
                 {
-                    Console.Write("\nInvalid device detected\n\n");
+                    Write("\nInvalid device detected\n\n");
                     if (_verbose)
-                        Console.WriteLine(inbfr[0].ToString("X") + " " + inbfr[1].ToString("X") + " " + inbfr[2].ToString("X"));
+                        WriteLine(inbfr[0].ToString("X") + " " + inbfr[1].ToString("X") + " " + inbfr[2].ToString("X"));
                     return false;
                 }
             }
             catch (Exception e)
             {
-                Console.Write("\nCould not read device signature\n\n");
-                if (_verbose) Console.WriteLine(e.Message);
+                Write("\nCould not read device signature\n\n");
+                if (_verbose) WriteLine(e.Message);
                 return false;
             }
 
@@ -323,18 +354,18 @@ namespace mageload
                         return false;
                 }
 
-                if (!_verbose) Console.Write("Writing   ");
+                if (!_verbose) Write("Writing   ");
                 _serial.ReadExisting();
                 uint lastpercent = 0;
                 for (uint i = 0; i < _maxAddress; i += _pageSize)
                 {
                     if (!_verbose)
                     {
-                        uint percent = (uint) (((float) i/(float) _maxAddress)*50);
+                        uint percent = (uint) (((float) i/_maxAddress)*50);
                         if (percent >= lastpercent)
                         {
                             for (; lastpercent <= percent; lastpercent++)
-                                Console.Write("+");
+                                Write("+");
                         }
                     }
                     byte[] bfr = new byte[6];
@@ -345,7 +376,7 @@ namespace mageload
                     bfr[3] = (byte)(address >> 8);
                     bfr[4] = (byte)(address);
                     bfr[5] = (byte)Commands.Execute;
-                    if (_verbose) Console.Write("ADDRESS " + ToHex(bfr) + " ");
+                    if (_verbose) Write("ADDRESS " + ToHex(bfr) + " ");
                     _serial.Write(bfr, 0, 6);
 
                     if (_ota) Thread.Sleep(60);
@@ -354,11 +385,11 @@ namespace mageload
                     if (!_ota)
                     {
                         response = (byte) _serial.ReadByte();
-                        if (_verbose) Console.WriteLine(ToHex(response));
+                        if (_verbose) WriteLine(ToHex(response));
                         if (response != (byte) Commands.OK)
                         {
-                            Console.Write("\nFailed to address memory\n\n");
-                            if (_verbose) Console.WriteLine("Invalid response: 0x" + response.ToString("X"));
+                            Write("\nFailed to address memory\n\n");
+                            if (_verbose) WriteLine("Invalid response: 0x" + response.ToString("X"));
                             return false;
                         }
                     }
@@ -368,10 +399,10 @@ namespace mageload
                     bfr[1] = (byte)(_pageSize >> 8);
                     bfr[2] = (byte)(_pageSize);
                     bfr[3] = (byte)(Commands.Execute);
-                    if (_verbose) Console.Write("WRITE   " + ToHex(bfr) + " ");
+                    if (_verbose) Write("WRITE   " + ToHex(bfr) + " ");
                     _serial.Write(bfr, 0, 4);
                     if (_ota) Thread.Sleep(60);
-                    if (_verbose) Console.Write("...DATA... ");
+                    if (_verbose) Write("...DATA... ");
                     if (_ota)
                     {
                         int size = _pageSize/4;
@@ -397,22 +428,22 @@ namespace mageload
                     if (!_ota)
                     {
                         response = (byte) _serial.ReadByte();
-                        if (_verbose) Console.WriteLine(ToHex(response));
+                        if (_verbose) WriteLine(ToHex(response));
                         if (response != (byte) Commands.OK)
                         {
-                            Console.Write("\nFailed to write memory\n\n");
-                            if (_verbose) Console.WriteLine("Invalid response: 0x" + response.ToString("X"));
+                            Write("\nFailed to write memory\n\n");
+                            if (_verbose) WriteLine("Invalid response: 0x" + response.ToString("X"));
                             return false;
                         }
                     }
-                    if(_verbose && _ota) Console.WriteLine("");
+                    if(_verbose && _ota) WriteLine("");
                 }
-                if (!_verbose) Console.Write("\n\n");
+                if (!_verbose) Write("\n\n");
             }
             catch (Exception e)
             {
-                Console.Write("\nCommunication failure\n\n");
-                if (_verbose) Console.WriteLine(e.Message);
+                Write("\nCommunication failure\n\n");
+                if (_verbose) WriteLine(e.Message);
                 return false;
             }
             return true;
@@ -422,18 +453,18 @@ namespace mageload
         {
             try
             {
-                if (!_verbose) Console.Write("Verifying ");
+                if (!_verbose) Write("Verifying ");
                 byte[] bfr;
                 uint lastpercent = 0;
                 for (uint i = 0; i < _maxAddress; i += _pageSize)
                 {
                     if (!_verbose)
                     {
-                        uint percent = (uint)(((float)i / (float)_maxAddress) * 50);
+                        uint percent = (uint)(((float)i / _maxAddress) * 50);
                         if (percent >= lastpercent)
                         {
                             for (; lastpercent <= percent; lastpercent++)
-                                Console.Write("+");
+                                Write("+");
                         }
                     }
                     bfr = new byte[6];
@@ -444,15 +475,15 @@ namespace mageload
                     bfr[3] = (byte)(address >> 8);
                     bfr[4] = (byte)(address);
                     bfr[5] = (byte)Commands.Execute;
-                    if (_verbose) Console.Write("ADDRESS " + ToHex(bfr) + " ");
+                    if (_verbose) Write("ADDRESS " + ToHex(bfr) + " ");
                     _serial.Write(bfr, 0, 6);
 
                     byte response = (byte)_serial.ReadByte();
-                    if (_verbose) Console.WriteLine(ToHex(response));
+                    if (_verbose) WriteLine(ToHex(response));
                     if (response != (byte)Commands.OK)
                     {
-                        Console.Write("\nFailed to address memory\n\n");
-                        if (_verbose) Console.WriteLine("Invalid response: 0x" + response.ToString("X"));
+                        Write("\nFailed to address memory\n\n");
+                        if (_verbose) WriteLine("Invalid response: 0x" + response.ToString("X"));
                         return false;
                     }
 
@@ -461,22 +492,22 @@ namespace mageload
                     bfr[1] = (byte)(_pageSize >> 8);
                     bfr[2] = (byte)(_pageSize);
                     bfr[3] = (byte)(Commands.Execute);
-                    if (_verbose) Console.Write("READ    " + ToHex(bfr) + " ");
+                    if (_verbose) Write("READ    " + ToHex(bfr) + " ");
                     _serial.Write(bfr, 0, 4);
 
                     byte[] data = new byte[_pageSize];
-                    if (_verbose) Console.Write("...DATA... ");
+                    if (_verbose) Write("...DATA... ");
                     for (int j = 0; j < _pageSize; j++)
                     {
                         data[j] = (byte)_serial.ReadByte();
                     }
 
                     response = (byte)_serial.ReadByte();
-                    if (_verbose) Console.WriteLine(ToHex(response));
+                    if (_verbose) WriteLine(ToHex(response));
                     if (response != (byte)Commands.OK)
                     {
-                        Console.Write("\nFailed to read memory\n\n");
-                        if (_verbose) Console.WriteLine("Invalid response: 0x" + response.ToString("X"));
+                        Write("\nFailed to read memory\n\n");
+                        if (_verbose) WriteLine("Invalid response: 0x" + response.ToString("X"));
                         return false;
                     }
 
@@ -484,26 +515,26 @@ namespace mageload
                     {
                         if (_data[i + j] != data[j])
                         {
-                            Console.Write("\nFailed to verify memory\n\n");
-                            if (_verbose) Console.WriteLine("Address: " + i.ToString("X") + "\nRead: " + _data[i+j].ToString("X") + " Expected: " + data[j].ToString("X"));
+                            Write("\nFailed to verify memory\n\n");
+                            if (_verbose) WriteLine("Address: " + i.ToString("X") + "\nRead: " + _data[i+j].ToString("X") + " Expected: " + data[j].ToString("X"));
                             return false;
                         }
                     }
                 }
 
-                if (!_verbose) Console.Write("\n");
+                if (!_verbose) Write("\n");
                 bfr = new byte[2];
                 bfr[0] = (byte)Commands.Exit;
                 bfr[1] = (byte)(Commands.Execute);
-                if (_verbose) Console.WriteLine("EXIT");
+                if (_verbose) WriteLine("EXIT");
                 _serial.Write(bfr, 0, 2);
 
                 SerialClose();
             }
             catch (Exception e)
             {
-                Console.Write("\nCommunication failure\n\n");
-                if (_verbose) Console.WriteLine(e.Message);
+                Write("\nCommunication failure\n\n");
+                if (_verbose) WriteLine(e.Message);
                 return false;
             }
             return true;
@@ -517,13 +548,13 @@ namespace mageload
                 {
                     if (!ATMode()) return;
 
-                    if (_verbose) Console.WriteLine("Setting API 2 mode");
+                    if (_verbose) WriteLine("Setting API 2 mode");
                     _serial.Write("ATAP 2\r".ToCharArray(), 0, 7);
                     _serial.ReadChar();
                     _serial.ReadChar();
                     if (_serial.ReadByte() != 0x0D)
                     {
-                        Console.Write("\nCould not set API 2 mode\n\n");
+                        Write("\nCould not set API 2 mode\n\n");
                         return;
                     }
 
@@ -533,8 +564,8 @@ namespace mageload
             }
             catch (Exception e)
             {
-                Console.Write("\nCould not close " + _port + "\n\n");
-                if(_verbose) Console.WriteLine(e.Message);
+                Write("\nCould not close " + _port + "\n\n");
+                if(_verbose) WriteLine(e.Message);
             }
         }
 
@@ -542,19 +573,19 @@ namespace mageload
         {
             byte[] dfuCommand = { 0x7E, 0x00, 0x0F, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFE, 0x00, 0x00, 0xFF, 0xF5};
 
-            if(_verbose) Console.WriteLine("Broadcasting DFU command...");
+            if(_verbose) WriteLine("Broadcasting DFU command...");
             _serial.Write(dfuCommand, 0, 19);
             Thread.Sleep(100);
 
             if (!ATMode()) return false;
 
-            if (_verbose) Console.WriteLine("Setting transparent mode");
+            if (_verbose) WriteLine("Setting transparent mode");
             _serial.Write("ATAP 0\r".ToCharArray(), 0, 7);
             _serial.ReadChar();
             _serial.ReadChar();
             if (_serial.ReadByte() != 0x0D)
             {
-                Console.Write("\nCould not set transparent mode\n\n");
+                Write("\nCould not set transparent mode\n\n");
                 return false;
             }
 
@@ -582,7 +613,7 @@ namespace mageload
         {
             while (_serial.BytesToWrite != 0) {}
             while (_serial.BytesToRead != 0) { _serial.ReadByte(); }
-            if (_verbose) Console.WriteLine("Entering AT mode");
+            if (_verbose) WriteLine("Entering AT mode");
             Thread.Sleep(200);
             _serial.Write("+++".ToCharArray(), 0, 3);
             Thread.Sleep(10);
@@ -590,7 +621,7 @@ namespace mageload
             _serial.ReadChar();
             if (_serial.ReadByte() != 0x0D)
             {
-                Console.Write("\nCould not enter AT mode\n\n");
+                Write("\nCould not enter AT mode\n\n");
                 return false;
             }
             return true;
@@ -598,16 +629,40 @@ namespace mageload
 
         static bool ExitATMode()
         {
-            if (_verbose) Console.WriteLine("Exiting AT mode");
+            if (_verbose) WriteLine("Exiting AT mode");
             _serial.Write("ATCN\r".ToCharArray(), 0, 5);
             _serial.ReadChar();
             _serial.ReadChar();
             if (_serial.ReadByte() != 0x0D)
             {
-                Console.Write("\nCould not exit AT mode\n\n");
+                Write("\nCould not exit AT mode\n\n");
                 return false;
             }
             return true;
+        }
+
+        static void Write(string output)
+        {
+            if (Pane != null)
+            {
+                Pane.OutputString(output);
+            }
+            else
+            {
+                Console.Write(output);
+            }
+        }
+
+        static void WriteLine(string output)
+        {
+            if (Pane != null)
+            {
+                Pane.OutputString(output + "\n");
+            }
+            else
+            {
+                Console.WriteLine(output);
+            }
         }
     }
 }

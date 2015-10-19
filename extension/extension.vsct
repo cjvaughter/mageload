@@ -1,0 +1,60 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+// Copyright 2015 Oklahoma State University
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+-->
+
+<CommandTable xmlns="http://schemas.microsoft.com/VisualStudio/2005-10-18/CommandTable" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+
+  <Extern href="stdidcmd.h"/>
+  <Extern href="vsshlids.h"/>
+
+  <Commands package="guidextensionPkg">
+    <Groups>
+      <Group guid="guidextensionCmdSet" id="MyMenuGroup" priority="0x0600">
+        <Parent guid="guidSHLMainMenu" id="IDM_VS_MENU_TOOLS"/>
+      </Group>
+    </Groups>
+    
+    <Buttons>
+      <Button guid="guidextensionCmdSet" id="cmdDeploy" priority="0x0100" type="Button" >
+        <Parent guid="guidextensionCmdSet" id="MyMenuGroup" />
+        <CommandFlag>DefaultDisabled</CommandFlag>
+        <Strings>
+          <ButtonText>Deploy</ButtonText>
+        </Strings>
+      </Button>
+
+      <Button guid="guidextensionCmdSet" id="cmdChoosePort" priority="0x0101" type="Button">
+        <Parent guid="guidextensionCmdSet" id="MyMenuGroup" />
+        <CommandFlag>DefaultDisabled</CommandFlag>
+        <Strings>
+          <ButtonText>Choose Port</ButtonText>
+        </Strings>
+      </Button>
+    </Buttons>
+  </Commands>
+
+  <Symbols>
+    <GuidSymbol name="guidextensionPkg" value="{bb99eb3c-b0b5-450b-a131-9c08565f7ed8}" />
+  
+    <GuidSymbol name="guidextensionCmdSet" value="{b01a2907-cab4-4441-8ada-95a9729996c1}">
+      <IDSymbol name="TopLevelMenu" value="0x1021"/>
+      <IDSymbol name="MyMenuGroup" value="0x1020" />
+      <IDSymbol name="cmdDeploy" value="0x0100" />
+      <IDSymbol name="cmdChoosePort" value="0x0101" />
+    </GuidSymbol>
+  </Symbols>
+
+</CommandTable>
