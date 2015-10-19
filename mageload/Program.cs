@@ -1,4 +1,8 @@
-﻿// Copyright 2015 Oklahoma State University
+﻿//**************************************************************************
+// Description: mageload - Application loader for mageboot
+// Author: CJ Vaughter
+//**************************************************************************
+// Copyright 2015 Oklahoma State University
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,6 +15,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//**************************************************************************
 
 using System;
 using System.IO;
@@ -38,9 +43,9 @@ namespace mageload
 
     public enum Signature : byte
     {
-        PIU_0 = 0x1E,
-        PIU_1 = 0x98,
-        PIU_2 = 0x01,
+        PIU_0  = 0x1E,
+        PIU_1  = 0x98,
+        PIU_2  = 0x01,
         Cert_0 = 0x1E,
         Cert_1 = 0x95,
         Cert_2 = 0x0F,
@@ -61,7 +66,7 @@ namespace mageload
         public static IVsOutputWindowPane Pane = null;
 
         static bool _verbose;
-        static bool _ota;
+        //static bool _ota;
         static string _port = "";
         static string _file = "";
         static string _hex = "";
@@ -79,7 +84,7 @@ namespace mageload
                              + "Usage: mageload [options] [-p port] [-f file]\n\n"
                              + "OPTIONS:\n"
                              + "       -v Verbose mode\n\n"
-                             + "       -o OTA mode (no verification)\n\n"
+                           //+ "       -o OTA mode (no verification)\n\n"  //Removed, OTA should be done using the MAGE 2 Server
                              + "-p port:  Specify port (stored for reuse)\n"
                              + "          If no port specified, a window will appear\n\n"
                              + "-f file:  The hex file to load\n\n";
@@ -87,7 +92,7 @@ namespace mageload
         public static void Main(string[] args)
         {
             _verbose = false;
-            _ota = false;
+            //_ota = false;
             _port = "";
             _file = "";
             _hex = "";
@@ -110,14 +115,14 @@ namespace mageload
                 SerialClose();
                 return;
             }
-            if (!_ota)
+            //if (!_ota)
+            //{
+            if (!VerifyData())
             {
-                if (!VerifyData())
-                {
-                    SerialClose();
-                    return;
-                }
+                SerialClose();
+                return;
             }
+            //}
             SerialClose();
             Write("\nUpload successful\n");
         }
@@ -135,11 +140,11 @@ namespace mageload
                 _verbose = true;
                 argIndex++;
             }
-            if (args[argIndex].ToLower() == "-o")
-            {
-                _ota = true;
-                argIndex++;
-            }
+            //if (args[argIndex].ToLower() == "-o")
+            //{
+            //_ota = true;
+            //argIndex++;
+            //}
             if (args[argIndex].ToLower() == "-p")
             {
                 argIndex++;
@@ -225,7 +230,7 @@ namespace mageload
                             char[] digits = data.ToCharArray();
                             for (int i = 0; i < digits.Length; i += 2)
                             {
-                                _data[address+i/2] = Convert.ToByte(string.Concat(digits[i], digits[i + 1]), 16);
+                                _data[address + i / 2] = Convert.ToByte(string.Concat(digits[i], digits[i + 1]), 16);
                             }
                             uint temp = address + length;
                             if (temp > _maxAddress) _maxAddress = temp;
@@ -248,7 +253,7 @@ namespace mageload
                     }
                 }
             }
-            catch(Exception e)
+            catch (Exception e)
             {
                 Write("\nUnrecognized file\n\n");
                 if (_verbose) WriteLine(e.Message);
@@ -267,7 +272,7 @@ namespace mageload
             }
 
             int baud = 115200;
-            if (_ota) baud = 38400;
+            //if (_ota) baud = 38400;
 
             _serial = new SerialPort(_port, baud, Parity.None, 8, StopBits.One)
             {
@@ -278,53 +283,53 @@ namespace mageload
             try
             {
                 _serial.Open();
-                if (!_ota)
-                {
-                    _serial.DtrEnable = true;
-                    Thread.Sleep(50);
-                    _serial.DtrEnable = false;
-                    Thread.Sleep(50);
-                }
+                //if (!_ota)
+                //{
+                _serial.DtrEnable = true;
+                Thread.Sleep(50);
+                _serial.DtrEnable = false;
+                Thread.Sleep(50);
+                //}
             }
             catch (Exception e)
             {
                 Write("\nCould not open COM port\n\n");
-                if(_verbose) WriteLine(e.Message);
+                if (_verbose) WriteLine(e.Message);
                 return false;
             }
-
+            /*
             if (_ota)
             {
                 _pageSize = 256;
                 _data = Enumerable.Repeat<byte>(0xFF, 261120).ToArray();
                 return true;
             }
-
+            */
             try
             {
-                byte[] outbfr = {(byte) Commands.Signature, (byte) Commands.Execute};
+                byte[] outbfr = { (byte)Commands.Signature, (byte)Commands.Execute };
                 byte[] inbfr = new byte[4];
                 _serial.ReadExisting();
                 _serial.Write(outbfr, 0, 2);
 
-                inbfr[0] = (byte) _serial.ReadByte();
-                inbfr[1] = (byte) _serial.ReadByte();
-                inbfr[2] = (byte) _serial.ReadByte();
-                inbfr[3] = (byte) _serial.ReadByte();
+                inbfr[0] = (byte)_serial.ReadByte();
+                inbfr[1] = (byte)_serial.ReadByte();
+                inbfr[2] = (byte)_serial.ReadByte();
+                inbfr[3] = (byte)_serial.ReadByte();
 
-                if (inbfr[0] == (byte) Signature.PIU_0 && inbfr[1] == (byte) Signature.PIU_1 &&
-                    inbfr[2] == (byte) Signature.PIU_2 && inbfr[3] == (byte) Commands.OK)
+                if (inbfr[0] == (byte)Signature.PIU_0 && inbfr[1] == (byte)Signature.PIU_1 &&
+                    inbfr[2] == (byte)Signature.PIU_2 && inbfr[3] == (byte)Commands.OK)
                 {
                     _pageSize = 256;
                     if (_verbose) WriteLine("Player Interface Unit found\n");
                     _data = Enumerable.Repeat<byte>(0xFF, 261120).ToArray(); //leave space for bootloader
                 }
-                else if (inbfr[0] == (byte) Signature.Cert_0 && inbfr[1] == (byte) Signature.Cert_1 &&
-                         inbfr[2] == (byte) Signature.Cert_2 && inbfr[3] == (byte) Commands.OK)
+                else if (inbfr[0] == (byte)Signature.Cert_0 && inbfr[1] == (byte)Signature.Cert_1 &&
+                         inbfr[2] == (byte)Signature.Cert_2 && inbfr[3] == (byte)Commands.OK)
                 {
                     _pageSize = 128;
                     if (_verbose) WriteLine("MCU Certification Board found\n");
-                    _data = Enumerable.Repeat<byte>(0xFF, 32000).ToArray();
+                    _data = Enumerable.Repeat<byte>(0xFF, 32256).ToArray(); //leave space for bootloader
                 }
                 else
                 {
@@ -348,12 +353,13 @@ namespace mageload
         {
             try
             {
+                /*
                 if (_ota)
                 {
                     if (!OTA())
                         return false;
                 }
-
+                */
                 if (!_verbose) Write("Writing   ");
                 _serial.ReadExisting();
                 uint lastpercent = 0;
@@ -361,7 +367,7 @@ namespace mageload
                 {
                     if (!_verbose)
                     {
-                        uint percent = (uint) (((float) i/_maxAddress)*50);
+                        uint percent = (uint)(((float)i / _maxAddress) * 50);
                         if (percent >= lastpercent)
                         {
                             for (; lastpercent <= percent; lastpercent++)
@@ -379,20 +385,20 @@ namespace mageload
                     if (_verbose) Write("ADDRESS " + ToHex(bfr) + " ");
                     _serial.Write(bfr, 0, 6);
 
-                    if (_ota) Thread.Sleep(60);
+                    //if (_ota) Thread.Sleep(60);
 
                     byte response;
-                    if (!_ota)
+                    //if (!_ota)
+                    //{
+                    response = (byte)_serial.ReadByte();
+                    if (_verbose) WriteLine(ToHex(response));
+                    if (response != (byte)Commands.OK)
                     {
-                        response = (byte) _serial.ReadByte();
-                        if (_verbose) WriteLine(ToHex(response));
-                        if (response != (byte) Commands.OK)
-                        {
-                            Write("\nFailed to address memory\n\n");
-                            if (_verbose) WriteLine("Invalid response: 0x" + response.ToString("X"));
-                            return false;
-                        }
+                        Write("\nFailed to address memory\n\n");
+                        if (_verbose) WriteLine("Invalid response: 0x" + response.ToString("X"));
+                        return false;
                     }
+                    //}
 
                     bfr = new byte[4];
                     bfr[0] = (byte)Commands.Write;
@@ -401,8 +407,9 @@ namespace mageload
                     bfr[3] = (byte)(Commands.Execute);
                     if (_verbose) Write("WRITE   " + ToHex(bfr) + " ");
                     _serial.Write(bfr, 0, 4);
-                    if (_ota) Thread.Sleep(60);
+                    //if (_ota) Thread.Sleep(60);
                     if (_verbose) Write("...DATA... ");
+                    /*
                     if (_ota)
                     {
                         int size = _pageSize/4;
@@ -421,22 +428,23 @@ namespace mageload
                     }
                     else
                     {
-                        _serial.Write(_data, (int)i, _pageSize);
-                        while (_serial.BytesToWrite != 0) { }
-                    }
+                    */
+                    _serial.Write(_data, (int)i, _pageSize);
+                    while (_serial.BytesToWrite != 0) { }
+                    //}
 
-                    if (!_ota)
+                    //if (!_ota)
+                    //{
+                    response = (byte)_serial.ReadByte();
+                    if (_verbose) WriteLine(ToHex(response));
+                    if (response != (byte)Commands.OK)
                     {
-                        response = (byte) _serial.ReadByte();
-                        if (_verbose) WriteLine(ToHex(response));
-                        if (response != (byte) Commands.OK)
-                        {
-                            Write("\nFailed to write memory\n\n");
-                            if (_verbose) WriteLine("Invalid response: 0x" + response.ToString("X"));
-                            return false;
-                        }
+                        Write("\nFailed to write memory\n\n");
+                        if (_verbose) WriteLine("Invalid response: 0x" + response.ToString("X"));
+                        return false;
                     }
-                    if(_verbose && _ota) WriteLine("");
+                    //}
+                    //if(_verbose && _ota) WriteLine("");
                 }
                 if (!_verbose) Write("\n\n");
             }
@@ -516,7 +524,7 @@ namespace mageload
                         if (_data[i + j] != data[j])
                         {
                             Write("\nFailed to verify memory\n\n");
-                            if (_verbose) WriteLine("Address: " + i.ToString("X") + "\nRead: " + _data[i+j].ToString("X") + " Expected: " + data[j].ToString("X"));
+                            if (_verbose) WriteLine("Address: " + i.ToString("X") + "\nRead: " + _data[i + j].ToString("X") + " Expected: " + data[j].ToString("X"));
                             return false;
                         }
                     }
@@ -544,6 +552,7 @@ namespace mageload
         {
             try
             {
+                /*
                 if (_ota)
                 {
                     if (!ATMode()) return;
@@ -560,15 +569,17 @@ namespace mageload
 
                     if (!ExitATMode()) return;
                 }
+                */
                 _serial.Close();
             }
             catch (Exception e)
             {
                 Write("\nCould not close " + _port + "\n\n");
-                if(_verbose) WriteLine(e.Message);
+                if (_verbose) WriteLine(e.Message);
             }
         }
 
+        /*
         private static bool OTA()
         {
             byte[] dfuCommand = { 0x7E, 0x00, 0x0F, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFE, 0x00, 0x00, 0xFF, 0xF5};
@@ -593,22 +604,7 @@ namespace mageload
 
             return true;
         }
-
-        static string ToHex(byte[] ba)
-        {
-            StringBuilder hex = new StringBuilder(ba.Length * 2);
-            foreach (byte b in ba)
-                hex.AppendFormat("{0:x2}", b);
-            return hex.ToString();
-        }
-
-        static string ToHex(byte ba)
-        {
-            StringBuilder hex = new StringBuilder(2);
-            hex.AppendFormat("{0:x2}", ba);
-            return hex.ToString();
-        }
-
+         
         static bool ATMode()
         {
             while (_serial.BytesToWrite != 0) {}
@@ -639,6 +635,22 @@ namespace mageload
                 return false;
             }
             return true;
+        }
+        */
+
+        static string ToHex(byte[] ba)
+        {
+            StringBuilder hex = new StringBuilder(ba.Length * 2);
+            foreach (byte b in ba)
+                hex.AppendFormat("{0:x2}", b);
+            return hex.ToString();
+        }
+
+        static string ToHex(byte ba)
+        {
+            StringBuilder hex = new StringBuilder(2);
+            hex.AppendFormat("{0:x2}", ba);
+            return hex.ToString();
         }
 
         static void Write(string output)

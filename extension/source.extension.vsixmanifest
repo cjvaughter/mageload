@@ -1,10 +1,11 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="bb99eb3c-b0b5-450b-a131-9c08565f7ed8" Version="2.0" Language="en-US" Publisher="OSU ECE Department" />
+    <Identity Id="bb99eb3c-b0b5-450b-a131-9c08565f7ed8" Version="2.3" Language="en-US" Publisher="OSU ECE Department" />
     <DisplayName>mageload</DisplayName>
     <Description>Integrates mageload with Atmel Studio</Description>
     <MoreInfo>https://github.com/cjvaughter/mageload</MoreInfo>
+    <License>LICENSE</License>
     <Icon>Resources\mageload.ico</Icon>
   </Metadata>
   <Installation AllUsers="true">

@@ -1,4 +1,8 @@
-﻿// Copyright 2015 Oklahoma State University
+﻿//**************************************************************************
+// Description: mageload Atmel Studio extension
+// Author: CJ Vaughter
+//**************************************************************************
+// Copyright 2015 Oklahoma State University
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,6 +15,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//**************************************************************************
 
 using System;
 using System.ComponentModel;
@@ -54,21 +59,22 @@ namespace mageload.extension
                 OleMenuCommand chooseport = new OleMenuCommand(ChoosePort, chooseportID);
                 chooseport.BeforeQueryStatus += button_BeforeQueryStatus;
                 mcs.AddCommand(chooseport);
-
-                IVsOutputWindow outputWindow = GetGlobalService(typeof(SVsOutputWindow)) as IVsOutputWindow;
-                if (outputWindow != null)
-                {
-                    IVsOutputWindowPane pane;
-                    outputWindow.CreatePane(VSConstants.OutputWindowPaneGuid.GeneralPane_guid, "mageload", 1, 0);
-                    outputWindow.GetPane(VSConstants.OutputWindowPaneGuid.GeneralPane_guid, out pane);
-                    Program.Pane = pane;
-                }
             }
-            _worker = new BackgroundWorker();
-            _worker.DoWork += DoDeploy;
 
             _dte = GetGlobalService(typeof(DTE)) as DTE;
             if (_dte != null) _dte.Commands.Item("Tools.Deploy").Bindings = "Global::F8";
+
+            IVsOutputWindow outputWindow = GetGlobalService(typeof(SVsOutputWindow)) as IVsOutputWindow;
+            if (outputWindow != null)
+            {
+                IVsOutputWindowPane pane;
+                outputWindow.CreatePane(VSConstants.OutputWindowPaneGuid.GeneralPane_guid, "mageload", 1, 0);
+                outputWindow.GetPane(VSConstants.OutputWindowPaneGuid.GeneralPane_guid, out pane);
+                Program.Pane = pane;
+            }
+
+            _worker = new BackgroundWorker();
+            _worker.DoWork += DoDeploy;
         }
 
         private void Deploy(object sender, EventArgs e)
